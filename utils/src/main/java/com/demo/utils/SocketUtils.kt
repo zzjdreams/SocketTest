@@ -20,9 +20,9 @@ class SocketUtils {
 
         fun createServerSocket(port: Int) {
             try {
-                serverSocket = ServerSocket(port)
                 CoroutineScope (SupervisorJob() +Dispatchers.IO).launch {
                     withContext(Dispatchers.IO) {
+                        serverSocket = ServerSocket(port)
                         while (true) {
                             socket = serverSocket?.accept()
                             serviceSocketListener?.onCreateSuccess(serverSocket!!)
@@ -117,7 +117,8 @@ class SocketUtils {
             withContext(Dispatchers.IO) {
                 try {
                     socket?.let {
-                        val writer = DataOutputStream(it.getOutputStream())
+                        val ops = it.getOutputStream()
+                        val writer = DataOutputStream(ops)
                         writer.writeUTF(key)
                         when(msg) {
                             is Int -> writer.write(msg)
@@ -127,6 +128,9 @@ class SocketUtils {
                             is ByteArray -> writer.write(msg)
                         }
                         socketMsgListener?.onSentSuccess()
+                        writer.flush()
+                        ops.flush()
+//                        writer.close()
                     }
 
 
@@ -139,29 +143,32 @@ class SocketUtils {
 
         private suspend fun startReceiver() {
             withContext(Dispatchers.IO) {
+                val isp =  socket!!.getInputStream()
+                val reader = DataInputStream(isp)
                 try {
-                    val reader = DataInputStream(socket?.getInputStream())
-                    while (startReceive) {
+                    while (true) {
                         val key  = reader.readUTF()
                         val msg = reader.readBytes()
                         socketMsgListener?.onReceived(key, msg)
+
                     }
                 } catch (e: IOException) {
                     e.printStackTrace()
+                }finally {
+                    reader.close()
+                    isp.close()
                 }
             }
         }
 
         fun start() {
-            if (startReceive) return
-            startReceive = true
             CoroutineScope (SupervisorJob() +Dispatchers.IO).launch {
                 startReceiver()
             }
         }
 
         fun stop() {
-            startReceive = false
+
         }
 
         open fun destroy() {

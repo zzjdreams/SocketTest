@@ -28,13 +28,14 @@ class MainActivity : AppCompatActivity() {
             override fun onConnectSuccess() {
                 runOnUiThread {
                     toast("创建成功")
+                    addMsg(">>创建成功<<")
                 }
             }
 
             override fun onConnectFailure() {
                 runOnUiThread {
                     toast("创建失败")
-
+                    addMsg(">>创建失败<<")
                 }
             }
         })
@@ -42,21 +43,20 @@ class MainActivity : AppCompatActivity() {
             override fun onSentSuccess() {
                 runOnUiThread {
                     toast("发送成功")
-
+                    addMsg(">>发送成功<<")
                 }
             }
 
             override fun onSentFailure() {
                 runOnUiThread {
                     toast("发送失败")
-
+                    addMsg(">>发送失败<<")
                 }
             }
 
             override fun onReceived(key: String, msg: ByteArray) {
                 runOnUiThread {
-                    binding.tvMsg.append("\n")
-                    binding.tvMsg.append("{key: $key, msg: ${String(msg, Charsets.UTF_8)}")
+                    addMsg("{key: $key, msg: ${String(msg, Charsets.UTF_8)}}")
                 }
 
             }
@@ -88,6 +88,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun toast(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun addMsg(msg: String) {
+        binding.tvMsg.append("\n")
+        binding.tvMsg.append(msg)
     }
 
     override fun onDestroy() {
