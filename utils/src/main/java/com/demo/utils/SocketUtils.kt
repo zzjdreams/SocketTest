@@ -1,10 +1,7 @@
 package com.demo.utils
 
 import android.text.TextUtils
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.MainScope
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.*
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.IOException
@@ -12,7 +9,7 @@ import java.net.ServerSocket
 import java.net.Socket
 
 class SocketUtils {
-    inner class Service: SocketStub() {
+    class Server(): SocketStub() {
 
         private var serverSocket: ServerSocket ?= null
         private var serviceSocketListener: ServerSocketListener? = null
@@ -24,9 +21,16 @@ class SocketUtils {
         fun createServerSocket(port: Int) {
             try {
                 serverSocket = ServerSocket(port)
-                socket = serverSocket?.accept()
-                serviceSocketListener?.onCreateSuccess(serverSocket!!)
-                start()
+                CoroutineScope (SupervisorJob() +Dispatchers.IO).launch {
+                    withContext(Dispatchers.IO) {
+                        while (true) {
+                            socket = serverSocket?.accept()
+                            serviceSocketListener?.onCreateSuccess(serverSocket!!)
+                            start()
+                        }
+                    }
+                }
+
             }catch (e: Exception) {
                 e.printStackTrace()
                 serviceSocketListener?.onCreateFailure()
@@ -35,9 +39,18 @@ class SocketUtils {
             }
         }
 
+        override fun destroy() {
+            try {
+                serverSocket?.close()
+            }catch (e: IOException) {
+                e.printStackTrace()
+            }
+
+        }
+
     }
 
-    inner class Client: SocketStub() {
+    class Client: SocketStub() {
         private var clientSocketListener: ClientSocketListener? = null
 
         fun setClientSocketListener(clientSocketListener: ClientSocketListener) {
@@ -46,9 +59,14 @@ class SocketUtils {
 
         fun connectServer(ip: String, port: Int) {
             try {
-                socket = Socket(ip, port)
-                clientSocketListener?.onConnectSuccess()
-                start()
+                CoroutineScope (SupervisorJob() +Dispatchers.IO).launch {
+                    withContext(Dispatchers.IO) {
+                        socket = Socket(ip, port)
+                        clientSocketListener?.onConnectSuccess()
+                        start()
+                    }
+                }
+
             }catch (e: Exception) {
                 e.printStackTrace()
                 clientSocketListener?.onConnectFailure()
@@ -58,10 +76,14 @@ class SocketUtils {
         }
     }
 
-    open class SocketStub{
+    abstract class SocketStub{
         protected var socket: Socket ?= null
         private var socketMsgListener: SocketMessageListener? = null
         private var startReceive = false
+
+        fun setMsgListener(msgListener: SocketMessageListener) {
+            this.socketMsgListener = msgListener
+        }
 
         fun sendMsg(msg: String) {
             if (socket == null) throw NullPointerException()
@@ -94,16 +116,19 @@ class SocketUtils {
         private suspend fun sendMsgByThread(key: String, msg: Any){
             withContext(Dispatchers.IO) {
                 try {
-                    val writer = DataOutputStream(socket?.getOutputStream())
-                    writer.writeUTF(key)
-                    when(msg) {
-                        is Int -> writer.write(msg)
-                        is String -> writer.writeUTF(msg)
-                        is Float -> writer.writeFloat(msg)
-                        is Double -> writer.writeDouble(msg)
-                        is ByteArray -> writer.write(msg)
+                    socket?.let {
+                        val writer = DataOutputStream(it.getOutputStream())
+                        writer.writeUTF(key)
+                        when(msg) {
+                            is Int -> writer.write(msg)
+                            is String -> writer.writeUTF(msg)
+                            is Float -> writer.writeFloat(msg)
+                            is Double -> writer.writeDouble(msg)
+                            is ByteArray -> writer.write(msg)
+                        }
+                        socketMsgListener?.onSentSuccess()
                     }
-                    socketMsgListener?.onSentSuccess()
+
 
                 } catch (e: IOException) {
                     e.printStackTrace()
@@ -130,7 +155,7 @@ class SocketUtils {
         fun start() {
             if (startReceive) return
             startReceive = true
-            MainScope().launch {
+            CoroutineScope (SupervisorJob() +Dispatchers.IO).launch {
                 startReceiver()
             }
         }
@@ -139,7 +164,7 @@ class SocketUtils {
             startReceive = false
         }
 
-        fun destroy() {
+        open fun destroy() {
             try {
                 socket?.close()
             }catch (e: IOException) {
