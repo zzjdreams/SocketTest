@@ -115,8 +115,8 @@ class SocketUtils {
             }
         }
 
-        private suspend fun sendMsgByThread(key: String, msg: Any){
-            withContext(Dispatchers.IO) {
+        private fun sendMsgByThread(key: String, msg: Any){
+            Thread(Runnable {
                 try {
                     socket?.let {
                         writer?.writeUTF(key)
@@ -127,18 +127,15 @@ class SocketUtils {
                             is Double -> writer?.writeDouble(msg)
                             is ByteArray -> writer?.write(msg)
                         }
-                        socketMsgListener?.onSentSuccess()
                         writer?.flush()
-//                        writer.close()
+                        socketMsgListener?.onSentSuccess()
                     }
-
-
                 } catch (e: IOException) {
                     e.printStackTrace()
                     close()
                     socketMsgListener?.onSentFailure()
                 }
-            }
+            }).start()
         }
 
         private suspend fun startReceiver() {
@@ -149,8 +146,8 @@ class SocketUtils {
                     startReceive = true
                     while (startReceive) {
                         val key  = reader!!.readUTF()
-                        val msg = reader!!.readBytes()
-                        socketMsgListener?.onReceived(key, msg)
+                        val msg = reader!!.readUTF()
+                        socketMsgListener?.onReceived(key, msg.toByteArray())
 
                     }
                 } catch (e: IOException) {
@@ -162,7 +159,7 @@ class SocketUtils {
         }
 
         fun start() {
-            CoroutineScope (SupervisorJob() +Dispatchers.IO).launch {
+            GlobalScope.launch {
                 startReceiver()
             }
         }
