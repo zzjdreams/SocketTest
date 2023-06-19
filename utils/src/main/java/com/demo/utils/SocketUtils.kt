@@ -80,6 +80,8 @@ class SocketUtils {
         protected var socket: Socket ?= null
         private var socketMsgListener: SocketMessageListener? = null
         private var startReceive = false
+        private var writer: DataOutputStream ?= null
+        private var reader: DataInputStream ?= null
 
         fun setMsgListener(msgListener: SocketMessageListener) {
             this.socketMsgListener = msgListener
@@ -102,8 +104,8 @@ class SocketUtils {
         private suspend fun sendMsgByThread(msg: String){
             withContext(Dispatchers.IO) {
                 try {
-                    val writer = DataOutputStream(socket?.getOutputStream())
-                    writer.writeUTF(msg) // 写一个UTF-8的信息
+                    writer?.writeUTF(msg) // 写一个UTF-8的信息
+                    writer?.flush()
                     socketMsgListener?.onSentSuccess()
 
                 } catch (e: IOException) {
@@ -117,25 +119,23 @@ class SocketUtils {
             withContext(Dispatchers.IO) {
                 try {
                     socket?.let {
-                        val ops = it.getOutputStream()
-                        val writer = DataOutputStream(ops)
-                        writer.writeUTF(key)
+                        writer?.writeUTF(key)
                         when(msg) {
-                            is Int -> writer.write(msg)
-                            is String -> writer.writeUTF(msg)
-                            is Float -> writer.writeFloat(msg)
-                            is Double -> writer.writeDouble(msg)
-                            is ByteArray -> writer.write(msg)
+                            is Int -> writer?.write(msg)
+                            is String -> writer?.writeUTF(msg)
+                            is Float -> writer?.writeFloat(msg)
+                            is Double -> writer?.writeDouble(msg)
+                            is ByteArray -> writer?.write(msg)
                         }
                         socketMsgListener?.onSentSuccess()
-                        writer.flush()
-                        ops.flush()
+                        writer?.flush()
 //                        writer.close()
                     }
 
 
                 } catch (e: IOException) {
                     e.printStackTrace()
+                    close()
                     socketMsgListener?.onSentFailure()
                 }
             }
@@ -143,20 +143,20 @@ class SocketUtils {
 
         private suspend fun startReceiver() {
             withContext(Dispatchers.IO) {
-                val isp =  socket!!.getInputStream()
-                val reader = DataInputStream(isp)
+                writer = DataOutputStream(socket?.getOutputStream())
+                reader = DataInputStream(socket!!.getInputStream())
                 try {
-                    while (true) {
-                        val key  = reader.readUTF()
-                        val msg = reader.readBytes()
+                    startReceive = true
+                    while (startReceive) {
+                        val key  = reader!!.readUTF()
+                        val msg = reader!!.readBytes()
                         socketMsgListener?.onReceived(key, msg)
 
                     }
                 } catch (e: IOException) {
+                    startReceive = false
                     e.printStackTrace()
-                }finally {
-                    reader.close()
-                    isp.close()
+                    close()
                 }
             }
         }
@@ -169,6 +169,11 @@ class SocketUtils {
 
         fun stop() {
 
+        }
+
+        private fun close() {
+            reader?.close()
+            writer?.close()
         }
 
         open fun destroy() {
